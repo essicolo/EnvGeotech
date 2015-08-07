@@ -1,2 +1,2 @@
 # EnvGeotech
-Scientific computations for environmental geotechnics
+Scientific computations in environmental geotechnics
