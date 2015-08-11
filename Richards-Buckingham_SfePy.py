@@ -75,7 +75,7 @@ def get_conductivity(ts, coors, problem, equations = None, mode = None, **kwargs
 
 materials = {
     'coef' : 'get_conductivity',
-    'flux' : ({'val' : -1E-6},),
+    'flux' : ({'val' : 1E-7},),
 }
 
 fields = {
