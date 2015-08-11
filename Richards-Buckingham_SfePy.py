@@ -1,8 +1,6 @@
 r"""
+variational formulation described at https://www.authorea.com/users/23640/articles/61529
 Inspired from http://sfepy.org/doc-devel/examples/diffusion/poisson_field_dependent_material.html
-source activate python2
-cd bin/sfepy
-./simple.py  SEP_problem-description-file/pde-unsat/poisson_field_dependent_material_unsat.py
 """
 
 from sfepy import data_dir
@@ -11,6 +9,7 @@ import numpy as np
 
 filename_mesh = data_dir + '/meshes/3d/cube_big_tetra.mesh'
 
+# Constitutive relationships
 class VanGenuchten(object):
     """
     Returns the water retention curve and hydraulic conductivity function
