@@ -50,7 +50,7 @@ class VanGenuchten(object):
             ((1+((self.aVG*self.psi[self.psi <= 0])**self.nVG))**(self.mVG*self.lVG))
         return([self.psi, self.k])
 
-
+# Material parameters
 cbl_thR = 0.045
 cbl_thS = 0.430
 cbl_aVG = 14.5
