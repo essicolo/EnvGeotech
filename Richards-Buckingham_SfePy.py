@@ -12,10 +12,9 @@ import numpy as np
 
 filename_mesh = data_dir + '/meshes/3d/cube_big_tetra.mesh'
 
-# Constitutive relationships
+# Constitutive relationships expressed in terms of psi, where psi is suction (psi = -h)
 
 ## Van Genuchten water retention curve (wrc) and hydraulic conductivity function (hcf)
-## Expressed in terms of psi, where psi is suction (psi = -h)
 class VanGenuchten(object):
     """
     Returns the water retention curve and hydraulic conductivity function
@@ -57,7 +56,6 @@ class VanGenuchten(object):
         return([self.psi, self.k])
 
 ## Brooks and Corey water retention curve (wrc) and hydraulic conductivity function (hcf)
-## Expressed in terms of psi, where psi is suction (psi = -h)
 class BrooksCorey(object):
     """
     Returns the water retention curve and hydraulic conductivity function
@@ -116,21 +114,27 @@ def get_conductivity(ts, coors, problem, equations = None, mode = None, **kwargs
     This relation results in larger h gradients where h is small.
     """
     if mode == 'qp':
-        # note: verifier ce qui sort de la forumaltion originale
-        # et comparer a ici
-        # http://sfepy.org/doc-devel/examples/diffusion/poisson_field_dependent_material.html
-        # reprendre une formulation plus simple (Brooks and Corey?)
+
+        # Get pressure values
         h_values = problem.evaluate('ev_volume_integrate.i.Omega(h)',
                                     mode = 'qp', verbose = False)
+
+        # van Genuchten and Brooks-Corey functions commented out in favor
+        # of a dummy function
         #hcf = VanGenuchten(thR = silt_thR, thS = silt_thS, aVG = silt_aVG, nVG = silt_nVG, mVG = 1-1/silt_nVG,
         #               lVG = silt_lVG, ksat = silt_ksat, psi = -h_values).hcf()
         #hcf = BrooksCorey(thR = silt_thR, thS = silt_thS, aev = silt_aev, lBC = silt_lBC, ksat = silt_ksat, psi = -h_values).hcf()
-        val = 7E-7 / (-(h_values) + 0.01) # hcf[1]
+
+        # Dummy function
+        val = scaling * silt_ksat / (-(h_values) + 0.01) # hcf[1]
+
+        # Check output
         output('h_values: min:', h_values.min(), 'max:', h_values.max())
         output('conductivity: min:', val.min(), 'max:', val.max())
 
-        val.shape = (val.shape[0], 1, 1)
-        # print("***print val***: ", val) # the outpu must be of shape [[[ 700.]] [[700.]] ]]]
+        # Reshape for compatibility with what SfePy expects
+        val.shape = (val.shape[0] * val.shape[1], 1, 1)
+
         return {'val' : val}
 
 
@@ -163,11 +167,11 @@ functions = {
 }
 
 integrals = {
-    'i' : 1,
+    'i' : 2, # not sure of value to use here
 }
 
 equations = {
-    'Pressure' : """dw_laplace.i.Omega(coef.val, v, h) - dw_surface_integrate.2.Gamma_Top(flux.val, v) = 0"""
+    'Pressure' : """dw_laplace.i.Omega(coef.val, v, h) - dw_surface_integrate.i.Gamma_Top(flux.val, v) = 0"""
 }
 
 solvers = {
