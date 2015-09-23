@@ -2,7 +2,8 @@ r"""
 variational formulation described at https://www.authorea.com/users/23640/articles/61529
 Inspired from http://sfepy.org/doc-devel/examples/diffusion/poisson_field_dependent_material.html
 
-./simple.py Richards-Buckingham_SfePy.py --save-regions-as-groups
+cd ~bin/sfepy
+./simple.py  SEP_pdf/EnvGeotech/Richards-Buckingham_SfePy.py --save-regions-as-groups
 ./postproc.py cube_big_tetra_regions.vtk # works with mayavi <= 4.2
 """
 
@@ -13,79 +14,15 @@ import numpy as np
 filename_mesh = data_dir + '/meshes/3d/cube_big_tetra.mesh'
 
 # Constitutive relationships expressed in terms of psi, where psi is suction (psi = -h)
+def vanGenuchten(ksat, aVG, nVG, mVG, lVG, psi):
+    k = np.piecewise(psi, [psi < 0, psi >= 0],
+    [ksat, ksat*((1-((aVG*psi[psi >= 0])**(nVG*mVG))*((1+((aVG*psi[psi >= 0])**nVG))**(-mVG)))**2) / ((1+((aVG*psi[psi >= 0])**nVG))**(mVG*lVG))])
+    return(k)
 
-## Van Genuchten water retention curve (wrc) and hydraulic conductivity function (hcf)
-class VanGenuchten(object):
-    """
-    Returns the water retention curve and hydraulic conductivity function
-    according to van Genuchten (1980)'s functions
-    """
-    def __init__(self, thR, thS, aVG, nVG, mVG, ksat, psi, lVG = 0.5):
-        self.aVG = aVG
-        self.nVG = nVG
-        self.mVG = mVG
-        self.lVG = lVG
-        self.ksat = ksat
-        self.thR = thR
-        self.thS = thS
-        self.psi = psi
-
-    def wrc(self):
-        if np.all(self.psi <= 0):
-            self.th = np.repeat(self.thS, len(self.psi))
-        elif np.all(self.psi > 0):
-            self.th = self.thR + (self.thS - self.thR) * (1+(self.aVG * self.psi) ** self.nVG) ** (-self.mVG)
-        else:
-            self.th = np.zeros(len(self.psi))
-            self.th[self.psi <= 0] = self.thS
-            self.th[self.psi > 0] = self.thR + (self.thS - self.thR) * (1+(self.aVG * self.psi[self.psi > 0]) ** self.nVG) ** (-self.mVG)
-        return([self.psi, self.th])
-
-    def hcf(self):
-        if np.all(self.psi <= 0):
-            self.k = np.repeat(self.ksat, len(self.psi))
-        elif np.all(self.psi > 0):
-            self.k = self.ksat*((1-((self.aVG*self.psi)**(self.nVG*self.mVG))* \
-            ((1+((self.aVG*self.psi)**self.nVG))**(-self.mVG)))**2) / \
-            ((1+((self.aVG*self.psi)**self.nVG))**(self.mVG*self.lVG))
-        else:
-            self.k = np.zeros(len(self.psi))
-            self.k[self.psi <= 0] = self.ksat
-            self.k[self.psi > 0] = self.ksat*((1-((self.aVG*self.psi[self.psi > 0])**(self.nVG*self.mVG))*      ((1+((self.aVG*self.psi[self.psi > 0])**self.nVG))**(-self.mVG)))**2) / \
-            ((1+((self.aVG*self.psi[self.psi > 0])**self.nVG))**(self.mVG*self.lVG))
-        return([self.psi, self.k])
-
-## Brooks and Corey water retention curve (wrc) and hydraulic conductivity function (hcf)
-class BrooksCorey(object):
-    """
-    Returns the water retention curve and hydraulic conductivity function
-    according to Brooks and Corey (1964)'s functions
-    """
-    def __init__(self, thR, thS, aev, lBC, ksat, psi):
-        self.aev = aev
-        self.lBC = lBC
-        self.ksat = ksat
-        self.thR = thR
-        self.thS = thS
-        self.psi = psi
-
-    def wrc(self):
-        if np.all(self.psi <= 0):
-            self.th = np.repeat(self.thS, len(self.psi))
-        else:
-            self.th = np.zeros(len(self.psi))
-            self.th[self.psi <= self.aev] = self.thS
-            self.th[self.psi > self.aev] = self.thR + (self.thS - self.thR) * (self.psi[self.psi > self.aev] / self.aev) ** (-self.lBC)
-        return([self.psi, self.th])
-
-    def hcf(self):
-        if np.all(self.psi <= 0):
-            self.k = np.repeat(self.ksat, len(self.psi))
-        else:
-            self.k = np.zeros(len(self.psi))
-            self.k[self.psi <= self.aev] = self.ksat
-            self.k[self.psi > self.aev] = self.ksat * (self.psi[self.psi > self.aev] / self.aev) ** (-2 - 3*self.lBC)
-        return([self.psi, self.k])
+def brooksCorey(aev, lBC, ksat, psi):
+    k = np.piecewise(psi, [psi < aev, psi >= aev],
+    [ksat, ksat * (psi[psi >= aev] / aev) ** (-2 - 3 * lBC)])
+    return(k)
 
 # Material parameters
 ## the initial residual is almost zero - this might mean that you need some
@@ -110,37 +47,37 @@ silt_lBC = 0.35
 
 def get_conductivity(ts, coors, problem, equations = None, mode = None, **kwargs):
     """
-    Calculates the conductivity with VanGenuchten returns it.
-    This relation results in larger h gradients where h is small.
+    Calculates the conductivity with a constitutive k(psi) relation,
+    where psi = -h.
     """
     if mode == 'qp':
 
-        # Get pressure values
+        ## Get pressure values
         h_values = problem.evaluate('ev_volume_integrate.i.Omega(h)',
-                                    mode = 'qp', verbose = False)
+                                    mode = 'qp', verbose = False) * scaling
+        psi_values = -h_values
 
-        # van Genuchten and Brooks-Corey functions commented out in favor
-        # of a dummy function
-        #hcf = VanGenuchten(thR = silt_thR, thS = silt_thS, aVG = silt_aVG, nVG = silt_nVG, mVG = 1-1/silt_nVG,
-        #               lVG = silt_lVG, ksat = silt_ksat, psi = -h_values).hcf()
-        #hcf = BrooksCorey(thR = silt_thR, thS = silt_thS, aev = silt_aev, lBC = silt_lBC, ksat = silt_ksat, psi = -h_values).hcf()
+        # van Genuchten
+        val = vanGenuchten(ksat = silt_ksat, aVG = silt_aVG, nVG = silt_nVG,
+                           mVG = silt_mVG, lVG = silt_lVG, psi = psi_values)
 
-        # Dummy function
-        val = scaling * silt_ksat / (-(h_values) + 0.01) # hcf[1]
+        # Brooks and Corey
+        #val = brooksCorey(ksat = silt_ksat, aev = silt_aev, lBC = silt_lBC,
+        #                  psi = psi_values)
+
+        # Reshape the val vector to match SfePy expectations
+        val.shape = (val.shape[0] * val.shape[1], 1, 1)
 
         # Check output
         output('h_values: min:', h_values.min(), 'max:', h_values.max())
         output('conductivity: min:', val.min(), 'max:', val.max())
-
-        # Reshape for compatibility with what SfePy expects
-        val.shape = (val.shape[0] * val.shape[1], 1, 1)
 
         return {'val' : val}
 
 
 materials = {
     'coef' : 'get_conductivity',
-    'flux' : ({'val' : 1E-7 * scaling},),
+    'flux' : ({'val' : 3E-8 * scaling},),
 }
 
 fields = {
@@ -175,12 +112,25 @@ equations = {
 }
 
 solvers = {
-    'ls' : ('ls.scipy_direct', {}),
-    'newton' : ('nls.newton', {
-        'i_max' : 1,
-        'eps_a' : 1e-10,
-        'eps_r' : 1.0,
-    }),
+     'ls' : ('ls.scipy_direct', {}),
+     'newton' : ('nls.newton', {
+         'i_max' : 1,
+         'eps_a' : -1e-10,
+         'eps_r' : -1,
+     }),
+     'ts' : ('ts.simple', {
+         't0' : 0.0,
+         't1' : 1.0,
+         'dt' : None,
+         'n_step' : 5,
+         'quasistatic' : True,
+     }),
+}
+
+options = {
+     'ts' : 'ts',
+     'nls' : 'newton',
+     'ls' : 'ls',
 }
 
 options = {
