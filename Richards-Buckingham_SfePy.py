@@ -1,6 +1,7 @@
 r"""
 variational formulation described at https://www.authorea.com/users/23640/articles/61529
 Inspired from http://sfepy.org/doc-devel/examples/diffusion/poisson_field_dependent_material.html
+Help thread: https://groups.google.com/forum/#!msg/sfepy-devel/dbEy3I3jSOg/mxQJEkpOCAAJ
 
 cd ~bin/sfepy
 ./simple.py  SEP_pdf/EnvGeotech/Richards-Buckingham_SfePy.py --save-regions-as-groups
